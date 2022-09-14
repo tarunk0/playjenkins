@@ -13,7 +13,7 @@ metadata:
   name: myweb
   namespace: pipeline-demo
 spec:
-  replicas: 1
+  replicas: 7
   selector:
     matchLabels:
       app: myweb
