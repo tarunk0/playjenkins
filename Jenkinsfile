@@ -1,46 +1,56 @@
 pipeline {
 
-  environment {
-    registry = "192.168.1.81:5000/justme/myweb"
-    dockerImage = ""
+  options {
+    ansiColor('xterm')
   }
 
-  agent any
-
+  agent {
+    kubernetes {
+      yamlFile 'builder.yaml'
+    }
+  }
+  environment {
+        PROJECT_ID = 'round-forge-355507'
+        CLUSTER_NAME = 'tk-cluster'
+        LOCATION = 'us-central1-a'
+        CREDENTIALS_ID = 'mygke'
+    }
+    
   stages {
 
-    stage('Checkout Source') {
+    stage('Kaniko Build & Push Image') {
       steps {
-        git 'https://github.com/justmeandopensource/playjenkins.git'
-      }
-    }
-
-    stage('Build image') {
-      steps{
-        script {
-          dockerImage = docker.build registry + ":$BUILD_NUMBER"
-        }
-      }
-    }
-
-    stage('Push Image') {
-      steps{
-        script {
-          docker.withRegistry( "" ) {
-            dockerImage.push()
+        container('kaniko') {
+          script {
+            sh '''
+            /kaniko/executor --dockerfile `pwd`/Dockerfile \
+                             --context `pwd` \
+                             --destination=tarunk0/myweb:${BUILD_NUMBER}
+            '''
           }
         }
       }
     }
-
-    stage('Deploy App') {
-      steps {
-        script {
-          kubernetesDeploy(configs: "myweb.yaml", kubeconfigId: "mykubeconfig")
+    stage('Deploy to GKE') {
+            steps{
+              container('kubectl'){
+                echo "deployment started .."
+                sh 'ls -ltr'
+                sh 'pwd'
+                sh 'sed -i "s/<TAG>/${BUILD_NUMBER}/" myweb.yaml'
+                step([
+                $class: 'KubernetesEngineBuilder',
+                projectId: env.PROJECT_ID,
+                clusterName: env.CLUSTER_NAME,
+                location: env.LOCATION,
+                manifestPattern: 'myweb.yaml',
+                credentialsId: env.CREDENTIALS_ID,
+                verifyDeployments: false])
+                echo "congratulations! Deployment Finished..."
+              }
+            }
+              
         }
-      }
     }
-
+  
   }
-
-}
